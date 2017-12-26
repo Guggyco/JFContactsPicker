@@ -129,6 +129,8 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         super.viewDidLoad()
         self.title = GlobalConstants.Strings.contactsTitle
         
+        self.view.backgroundColor = .red
+        
         registerContactCell()
         initializeBarButtons()
         setUpSearchBar()
