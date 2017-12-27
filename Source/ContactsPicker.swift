@@ -36,11 +36,12 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     public private(set) lazy var contactsStore: CNContactStore = { return CNContactStore() }()
     
     /// Contacts ordered in dictionary alphabetically using `sortOrder`.
-    private var orderedContacts = [String: [CNContact]]()
-    private var sortedContactKeys = [String]()
-    
+    private var contactsHolder = ContactsHolder()
+
+    /// Contacts ordered in dictionary alphabetically using `sortOrder` that are using the app.
+    private var contactsHolderUsingApp = ContactsHolder()
+
     public private(set) var selectedContacts = [Contact]()
-    private var filteredContacts = [CNContact]()
     
     /// The `delegate` for the picker.
     open weak var contactDelegate: ContactsPickerDelegate?
@@ -63,6 +64,9 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
             }
         }
     }
+    
+    // Filter to indicate if this contact already using the app
+    public var contactUsingAppFilter:((CNContact) -> Bool)?
     
     //Enables custom filtering of contacts.
     public var shouldIncludeContact: ((CNContact) -> Bool)? {
@@ -101,10 +105,12 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     public init(delegate: ContactsPickerDelegate? = nil,
                 multiSelection: Bool = false,
                 showIndexBar: Bool = true,
-                subtitleCellType: SubtitleCellValue = .phoneNumber) {
+                subtitleCellType: SubtitleCellValue = .phoneNumber,
+                contactUsingAppFilter:((CNContact) -> Bool)? = nil) {
         self.multiSelectEnabled = multiSelection
         self.subtitleCellValue = subtitleCellType
         self.shouldShowIndexBar = showIndexBar
+        self.contactUsingAppFilter = contactUsingAppFilter
         
         super.init(nibName: nil, bundle: nil)
         
@@ -128,8 +134,6 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     override open func viewDidLoad() {
         super.viewDidLoad()
         self.title = GlobalConstants.Strings.contactsTitle
-        
-        self.view.backgroundColor = .red
         
         registerContactCell()
         initializeBarButtons()
@@ -222,12 +226,15 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         case  CNAuthorizationStatus.authorized:
             //Authorization granted by user for this app.
             var contactsArray = [CNContact]()
-            
+            var contactsUsingAppArray = [CNContact]()
+
             var orderedContacts = [String : [CNContact]]()
-            
+            var orderedContactsUsingApp = [String : [CNContact]]()
+
             let contactFetchRequest = CNContactFetchRequest(keysToFetch: allowedContactKeys())
             
             do {
+                
                 try contactsStore.enumerateContacts(with: contactFetchRequest, usingBlock: { [weak self] (contact, stop) -> Void in
                     
                     //Adds the `contact` to the `contactsArray` if the closure returns true.
@@ -236,7 +243,19 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
                         return
                     }
                     
-                    contactsArray.append(contact)
+                    var isContactUsingApp = false
+                    
+                    if let contactUsingAppFilter = self?.contactUsingAppFilter {
+                        isContactUsingApp = contactUsingAppFilter(contact)
+                    }
+                    
+                    if isContactUsingApp {
+                        contactsUsingAppArray.append(contact)
+                    }
+                    else {
+                        contactsArray.append(contact)
+
+                    }
                     
                     //Ordering contacts based on alphabets in firstname
                     var key: String = "#"
@@ -246,18 +265,41 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
                         key = firstLetter.uppercased()
                     }
                     
-                    var contactsForKey = orderedContacts[key] ?? [CNContact]()
-                    contactsForKey.append(contact)
-                    orderedContacts[key] = contactsForKey
+                    if isContactUsingApp {
+                        
+                        var contactsForKey = orderedContactsUsingApp[key] ?? [CNContact]()
+                        contactsForKey.append(contact)
+                        orderedContactsUsingApp[key] = contactsForKey
+                        
+                    }
+                    else {
+                        
+                        var contactsForKey = orderedContacts[key] ?? [CNContact]()
+                        contactsForKey.append(contact)
+                        orderedContacts[key] = contactsForKey
+                        
+                    }
                     
                 })
                 
-                self.orderedContacts = orderedContacts
-                self.sortedContactKeys = Array(self.orderedContacts.keys).sorted(by: <)
-                if self.sortedContactKeys.first == "#" {
-                    self.sortedContactKeys.removeFirst()
-                    self.sortedContactKeys.append("#")
+                self.contactsHolder.orderedContacts = orderedContacts
+                self.contactsHolderUsingApp.orderedContacts = orderedContactsUsingApp
+
+                self.contactsHolder.sortedContacts = contactsArray
+                self.contactsHolderUsingApp.sortedContacts = contactsUsingAppArray
+
+                self.contactsHolder.sortedContactKeys = Array(self.contactsHolder.orderedContacts.keys).sorted(by: <)
+                if self.contactsHolder.sortedContactKeys.first == "#" {
+                    self.contactsHolder.sortedContactKeys.removeFirst()
+                    self.contactsHolder.sortedContactKeys.append("#")
                 }
+                
+                self.contactsHolderUsingApp.sortedContactKeys = Array(self.contactsHolderUsingApp.orderedContacts.keys).sorted(by: <)
+                if self.contactsHolderUsingApp.sortedContactKeys.first == "#" {
+                    self.contactsHolderUsingApp.sortedContactKeys.removeFirst()
+                    self.contactsHolderUsingApp.sortedContactKeys.append("#")
+                }
+                
                 completion(contactsArray, nil)
                 
             } catch let error as NSError {
@@ -308,15 +350,40 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     // MARK: - Table View DataSource
     
     open func numberOfSections(in tableView: UITableView) -> Int {
-        if let searchText = searchBar.text, !searchText.isEmpty { return 1 }
-        return sortedContactKeys.count
+        
+        if self.contactUsingAppFilter == nil {
+            
+            if let searchText = searchBar.text, !searchText.isEmpty { return 1 }
+            return contactsHolder.sortedContactKeys.count
+            
+        }
+        else{
+            return 2
+        }
+        
     }
     
     open func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        if let searchText = searchBar.text, !searchText.isEmpty { return filteredContacts.count }
-        if let contactsForSection = orderedContacts[sortedContactKeys[section]] {
-            return contactsForSection.count
+        
+        if self.contactUsingAppFilter == nil {
+            
+            if let searchText = searchBar.text, !searchText.isEmpty { return contactsHolder.filteredContacts.count }
+            if let contactsForSection = contactsHolder.orderedContacts[contactsHolder.sortedContactKeys[section]] {
+                return contactsForSection.count
+            }
+            
         }
+        else {
+            
+            if let searchText = searchBar.text, !searchText.isEmpty {
+                return section == 0 ? contactsHolderUsingApp.filteredContacts.count : contactsHolder.filteredContacts.count
+            }
+
+            return section == 0 ? contactsHolderUsingApp.sortedContacts.count : contactsHolder.sortedContacts.count
+
+        }
+        
+        
         return 0
     }
     
@@ -329,15 +396,37 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         let contact: Contact
         
         if let searchText = searchBar.text, !searchText.isEmpty {
-            contact = Contact(contact: filteredContacts[(indexPath as NSIndexPath).row])
             
-        } else {
-            guard let contactsForSection = orderedContacts[sortedContactKeys[(indexPath as NSIndexPath).section]] else {
-                assertionFailure()
-                return UITableViewCell()
+            if self.contactUsingAppFilter == nil || indexPath.section == 1 {
+                contact = Contact(contact: contactsHolder.filteredContacts[(indexPath as NSIndexPath).row])
+            }
+            else {
+                contact = Contact(contact: contactsHolderUsingApp.filteredContacts[(indexPath as NSIndexPath).row])
             }
             
-            contact = Contact(contact: contactsForSection[(indexPath as NSIndexPath).row])
+        } else {
+            
+            if self.contactUsingAppFilter == nil {
+                
+                guard let contactsForSection = contactsHolder.orderedContacts[contactsHolder.sortedContactKeys[(indexPath as NSIndexPath).section]] else {
+                    assertionFailure()
+                    return UITableViewCell()
+                }
+                
+                contact = Contact(contact: contactsForSection[(indexPath as NSIndexPath).row])
+
+            }
+            else if indexPath.section == 0 {
+                
+                contact = Contact(contact: self.contactsHolderUsingApp.sortedContacts[(indexPath as NSIndexPath).row])
+                
+            }
+            else {
+                
+                contact = Contact(contact: self.contactsHolder.sortedContacts[(indexPath as NSIndexPath).row])
+
+            }
+            
         }
         
         if multiSelectEnabled  && selectedContacts.contains(where: { $0.contactId == contact.contactId }) {
@@ -345,6 +434,7 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         }
         
         cell.updateContactsinUI(contact, indexPath: indexPath, subtitleType: subtitleCellValue)
+        
         return cell
     }
     
@@ -377,22 +467,40 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     }
     
     open func tableView(_ tableView: UITableView, sectionForSectionIndexTitle title: String, at index: Int) -> Int {
-        if let searchText = searchBar.text, !searchText.isEmpty { return 0 }
-        return sortedContactKeys.index(of: title)!
+        if let searchText = searchBar.text, !searchText.isEmpty { return self.contactUsingAppFilter == nil ? 0 : 2 }
+        
+        if self.contactUsingAppFilter == nil {
+            return contactsHolder.sortedContactKeys.index(of: title)!
+        }
+        else {
+            return 2
+        }
     }
     
     open func sectionIndexTitles(for tableView: UITableView) -> [String]? {
-        if shouldShowIndexBar {
+        if shouldShowIndexBar && self.contactUsingAppFilter == nil {
             if let searchText = searchBar.text, !searchText.isEmpty { return nil }
-            return sortedContactKeys
+            return contactsHolder.sortedContactKeys
         } else {
             return nil
         }
     }
     
     open func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        if let searchText = searchBar.text, !searchText.isEmpty { return nil }
-        return sortedContactKeys[section]
+        
+        if self.contactUsingAppFilter == nil {
+            
+            if let searchText = searchBar.text, !searchText.isEmpty { return nil }
+            return contactsHolder.sortedContactKeys[section]
+            
+        }
+        else if section == 0 {
+            return "Your Contacts Already On Guggy"
+        }
+        else {
+            return "Your Contacts"
+        }
+        
     }
     
     // MARK: - Button Actions
@@ -423,7 +531,7 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         if let searchText = searchBar.text, !searchText.isEmpty {
             
             let predicate: NSPredicate
-            if searchText.characters.count > 0 {
+            if searchText.count > 0 {
                 predicate = CNContact.predicateForContacts(matchingName: searchText)
             } else {
                 predicate = CNContact.predicateForContactsInContainer(withIdentifier: contactsStore.defaultContainerIdentifier())
@@ -431,10 +539,16 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
             
             let store = CNContactStore()
             do {
-                filteredContacts = try store.unifiedContacts(matching: predicate,
-                                                             keysToFetch: allowedContactKeys())
+                
+                contactsHolder.filteredContacts = try store.unifiedContacts(matching: predicate, keysToFetch: allowedContactKeys())
+                
                 if let shouldIncludeContact = shouldIncludeContact {
-                    filteredContacts = filteredContacts.filter(shouldIncludeContact)
+                    contactsHolder.filteredContacts = contactsHolder.filteredContacts.filter(shouldIncludeContact)
+                }
+                
+                if let contactUsingAppFilter = self.contactUsingAppFilter {
+                    contactsHolderUsingApp.filteredContacts = contactsHolder.filteredContacts.filter(contactUsingAppFilter)
+                    contactsHolder.filteredContacts = contactsHolder.filteredContacts.filter({!contactUsingAppFilter($0)})
                 }
                 
                 self.tableView.reloadData()
@@ -469,5 +583,14 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
             self.updateSearchResults(for: searchBar)
         })
     }
+    
+}
+
+private class ContactsHolder {
+    
+    public var orderedContacts = [String: [CNContact]]()
+    public var sortedContacts = [CNContact]()
+    public var sortedContactKeys = [String]()
+    public var filteredContacts = [CNContact]()
     
 }

@@ -8,7 +8,11 @@ import UIKit
 class ViewController: UIViewController, ContactsPickerDelegate {
   
   @IBAction func onTouchShowMeContactsButton(_ sender: AnyObject) {
-    let contactPickerScene = ContactsPicker(delegate: self, multiSelection: true, subtitleCellType: SubtitleCellValue.email)
+    let contactPickerScene = ContactsPicker(delegate: self, multiSelection: true, subtitleCellType: SubtitleCellValue.phoneNumber, contactUsingAppFilter: { (contact) -> Bool in
+        
+        return contact.phoneNumbers.count > 0 && (contact.phoneNumbers[0].value.stringValue == "+972503325372" || contact.phoneNumbers[0].value.stringValue == "+972545897509")
+        
+    })
     let navigationController = UINavigationController(rootViewController: contactPickerScene)
     self.present(navigationController, animated: true, completion: nil)
     
