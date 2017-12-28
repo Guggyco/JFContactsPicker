@@ -198,7 +198,7 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         case CNAuthorizationStatus.denied, CNAuthorizationStatus.restricted:
             //User has denied the current app to access the contacts.
             
-            let productName = Bundle.main.infoDictionary!["CFBundleName"]!
+            let productName = Bundle.main.infoDictionary!["CFBundleDisplayName"]!
             
             let alert = UIAlertController(title: "Unable to access contacts", message: "\(productName) does not have access to contacts. Kindly enable it in privacy settings ", preferredStyle: UIAlertControllerStyle.alert)
             let okAction = UIAlertAction(title: "Ok", style: UIAlertActionStyle.default, handler: {  action in
