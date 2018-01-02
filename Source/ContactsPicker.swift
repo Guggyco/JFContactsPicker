@@ -151,10 +151,26 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         self.navigationItem.leftBarButtonItem = cancelButton
         
         if multiSelectEnabled {
-            let doneButton = UIBarButtonItem(barButtonSystemItem: UIBarButtonSystemItem.done, target: self, action: #selector(onTouchDoneButton))
+            let doneButton = UIBarButtonItem(title: "Done (\(selectedContacts.count))", style: UIBarButtonItemStyle.done, target: self, action: #selector(onTouchDoneButton))
+            
+            
+            doneButton.isEnabled = false
+            
             self.navigationItem.rightBarButtonItem = doneButton
             
         }
+    }
+    
+    func setDoneButtonTitle() {
+        
+        self.navigationItem.rightBarButtonItem?.isEnabled = selectedContacts.count > 0
+        
+        UIView.performWithoutAnimation { [unowned self] in
+            
+            self.navigationItem.rightBarButtonItem?.title = "Done (\(selectedContacts.count))"
+
+        }
+        
     }
     
     private func registerContactCell() {
@@ -460,6 +476,9 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
             if searchBar.isFirstResponder { searchBar.resignFirstResponder() }
             self.contactDelegate?.contactPicker(self, didSelectContact: selectedContact)
         }
+        
+        self.setDoneButtonTitle()
+        
     }
     
     open func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
