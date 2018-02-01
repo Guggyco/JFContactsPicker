@@ -524,10 +524,6 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     // MARK: - Button Actions
     
     @objc func onTouchCancelButton() {
-        
-        // Bug fix
-        
-        self.navigationItem.rightBarButtonItem?.title = ""
 
         // TODO: Set up errors
         contactDelegate?.contactPicker(self, didCancel: NSError(domain: "JFContactsPickerErrorDomain",
