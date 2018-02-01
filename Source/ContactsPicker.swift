@@ -153,7 +153,6 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
         if multiSelectEnabled {
             let doneButton = UIBarButtonItem(title: "Done (\(selectedContacts.count))", style: UIBarButtonItemStyle.done, target: self, action: #selector(onTouchDoneButton))
             
-            
             doneButton.isEnabled = false
             
             self.navigationItem.rightBarButtonItem = doneButton
@@ -525,6 +524,9 @@ open class ContactsPicker: UIViewController, UITableViewDelegate, UITableViewDat
     // MARK: - Button Actions
     
     @objc func onTouchCancelButton() {
+        
+        self.navigationItem.rightBarButtonItem?.isEnabled = true
+
         // TODO: Set up errors
         contactDelegate?.contactPicker(self, didCancel: NSError(domain: "JFContactsPickerErrorDomain",
                                                                 code: 2,
